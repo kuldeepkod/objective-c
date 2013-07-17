@@ -14,6 +14,7 @@
 #import <CommonCrypto/CommonCryptor.h>
 #import <CommonCrypto/CommonHMAC.h>
 #import "NSData+PNAdditions.h"
+#import "NSDate+PNAddition.h"
 #include <stdlib.h>
 
 
@@ -36,6 +37,7 @@
 
 #pragma mark - Logging
 
+#define PNLOG_STORE_LOG_TO_FILE 0
 #define PNLOG_GENERAL_LOGGING_ENABLED 1
 #define PNLOG_REACHABILITY_LOGGING_ENABLED 1
 #define PNLOG_COMMUNICATION_CHANNEL_LAYER_ERROR_LOGGING_ENABLED 1
@@ -54,6 +56,39 @@ typedef enum _PNLogLevels {
     PNLogCommunicationChannelLayerInfoLevel
 } PNLogLevels;
 
+
+// Stores reference on console dump file path
+static NSString *consoleDumpFilePath;
+static dispatch_once_t dumpFileOpenOnceToken;
+static NSDateFormatter * const dateFormatter;
+
+
+static void PNLogDumpOutputToFile(NSString *output);
+void PNLogDumpOutputToFile(NSString *output) {
+
+    if (PNLOG_STORE_LOG_TO_FILE) {
+
+        // Retrieve path to the 'Documents' folder
+        NSString *documentsFolder = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) lastObject];
+        consoleDumpFilePath = [documentsFolder stringByAppendingPathComponent:@"pubnub-console-dump.txt"];
+
+        output = [[[NSDate date] consoleOutputTimestamp] stringByAppendingFormat:@"> %@\n", output];
+
+
+
+        FILE *consoleDumpFilePointer = fopen([consoleDumpFilePath UTF8String], "a+");
+        if (consoleDumpFilePointer == NULL) {
+
+            NSLog(@"PNLog: Can't open console dump file (%@)", consoleDumpFilePath);
+        }
+        else {
+
+            const char *cOutput = [output UTF8String];
+            fwrite(cOutput, strlen(cOutput), 1, consoleDumpFilePointer);
+            fclose(consoleDumpFilePointer);
+        }
+    }
+}
 
 static void PNLog(PNLogLevels level, id sender, ...);
 void PNLog(PNLogLevels level, id sender, ...) {
@@ -93,7 +128,9 @@ void PNLog(PNLogLevels level, id sender, ...) {
 
     if(formattedLog != nil && additionalData != nil) {
 
-        NSLog(@"%@%@", [NSString stringWithFormat:formattedLog, additionalData], formattedLogString);
+        NSString *consoleString = [NSString stringWithFormat:@"%@%@", [NSString stringWithFormat:formattedLog, additionalData], formattedLogString];
+        NSLog(@"%@", consoleString);
+        PNLogDumpOutputToFile(consoleString);
     }
 }
 
